@@ -335,10 +335,51 @@ function escapeHTML(text) {
   return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
+// Tabbit's free tier rejects by request rate, not by how much quota is left:
+// one account sat at 18% used through eleven minutes of 429s (code 492, "Welcome
+// to Tabbit Browser … for free"). An agent spends a turn per tool round, which is
+// the shape that trips it.
+//
+// Only a turn is paced. Reading the catalog, the usage report and the daily
+// sign-in are cheap and rare, and holding those back would slow the provider list
+// down for nothing.
+const TURN_INTERVAL_MS = Number(process.env.TABBIT_TURN_INTERVAL_MS ?? 1200)
+
+// Serialised on purpose: measuring a wait and then sleeping lets two turns that
+// arrive together sleep the same interval and fire together, which is the burst
+// the rate limit is watching for.
+let turnQueue = Promise.resolve()
+let lastTurnAt = 0
+
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms)
+    const stop = () => {
+      clearTimeout(timer)
+      reject(signal?.reason ?? new Error("aborted"))
+    }
+    if (signal?.aborted) return stop()
+    signal?.addEventListener?.("abort", stop, { once: true })
+  })
+}
+
+function paceTurn(signal) {
+  if (!(TURN_INTERVAL_MS > 0)) return turnQueue
+  const run = turnQueue.then(async () => {
+    const wait = lastTurnAt + TURN_INTERVAL_MS - Date.now()
+    if (wait > 0) await sleep(wait, signal)
+    lastTurnAt = Date.now()
+  })
+  // One aborted turn must not wedge the queue for the next one.
+  turnQueue = run.catch(() => {})
+  return run
+}
+
 // runTurn queues one turn. `selected_model` takes the catalog's
 // display_name, and `content` is the whole prompt: Tabbit keeps the room's
 // own history, so a follow-up may carry only the new message.
 export async function runTurn(creds, room, { content, model, parentMessageId = null, signal }) {
+  await paceTurn(signal)
   const rid = `tab_${crypto.randomUUID()}`
   const body = {
     client_run_id: rid,

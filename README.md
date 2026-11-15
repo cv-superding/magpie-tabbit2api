@@ -52,6 +52,31 @@ The catalog is read live from Tabbit per account. "Free models only" (in the pro
 - **Tabbit's models think out loud, and on a plain-text turn that reaches `content`.** Its API has no separate reasoning channel, so a reply like "The user asks X. I should answer Y." arrives as the answer. On a *call* turn this package drops it — the text before the call line is held and discarded when it reads as deliberation (`isNarration`). On a turn that produces no call there is nothing to compare against, so it is passed through rather than guessed at: suppressing a real answer is the worse failure. Expect the first sentence of some prose answers to read like the model talking to itself.
 - **The daily check-in and usage read are Tabbit's**, unchanged from the community package.
 
+## Rate limits
+
+Tabbit's free tier rejects by **request rate**, not by how much quota is left. Measured on one
+account: 29 rejections over an evening, every one a `429` carrying `code 492` and *"Welcome to
+Tabbit Browser … where you can use the most comprehensive and advanced models for free"* — while
+the same account's usage sat at 18% and moved by a tenth of a percent.
+
+An agent spends one turn per tool round, which is exactly the shape that trips it. So a turn is
+paced (`runTurn` in `src/api.mjs`), serially: measuring a wait and then sleeping would let turns
+that arrive together sleep the same interval and fire together, which is the burst the limit
+watches for.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `TABBIT_TURN_INTERVAL_MS` | `1200` | Minimum spacing between turns. `0` disables pacing. |
+
+Only a turn is paced. Reading the catalog, the usage report and the daily sign-in are cheap and
+rare; holding those back would slow the provider list down for nothing.
+
+If you route through several providers, put one that is not rate-limited first and let this one
+cover the gaps — Magpie cools a provider for ~40 seconds on a single 429, which costs more than
+the turn would have.
+
+
+
 ## Wording that matters
 
 Five phrasings in `src/toolify.mjs` were arrived at by watching a real model fail, and changing them back breaks tool calling:
@@ -75,7 +100,22 @@ If you tune the prompt, run `test/live/plain.mjs` — it sends the bare question
 npm test
 ```
 
-28 tests: the parser (markers split across chunks, markup never leaking as text, cut replies, thinking blocks) and the whole request path against a stubbed Tabbit (prompt carries the definitions, a reply becomes `tool_calls`, results are replayed, `tool_choice` behaviours, non-streaming).
+36 tests:
+
+- **the parser** — markers split across chunks, markup never leaking as text, replies cut
+  mid-`<invoke>`, thinking blocks, a nameless parameter a model invents on a no-argument tool
+- **the request path** — against a stubbed Tabbit: the prompt carries the definitions, a reply
+  becomes `tool_calls`, results are replayed, every `tool_choice` behaviour, non-streaming
+- **pacing** — turns spaced, concurrent turns serialised, an aborted turn not wedging the queue
+
+Live checks against the real API (need a stored Tabbit session):
+
+```bash
+node test/live/smoke.mjs   # the plugin contract as Magpie reads it
+node test/live/plain.mjs   # the bare question, no hint a tool exists
+node test/live/probe.mjs   # one tools request, prints the prompt and the result
+node test/live/loop.mjs    # a full round trip: call, return the result, answer
+```
 
 ## License
 
