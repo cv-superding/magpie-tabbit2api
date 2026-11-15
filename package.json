@@ -1,0 +1,54 @@
+{
+  "name": "magpie-tabbit2api",
+  "version": "1.0.0",
+  "description": "Tabbit (web.tabbit.com / web.tabbit.ai) as a magpie provider that serves real client tools: the tool definitions ride in the prompt as XML, the reply is parsed back into OpenAI tool_calls, and the tool result resumes the same turn.",
+  "type": "module",
+  "main": "./opencode.mjs",
+  "exports": {
+    ".": "./opencode2.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "opencode.mjs",
+    "opencode2.mjs",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "magpie",
+    "magpie-plugin",
+    "opencode",
+    "opencode-plugin",
+    "tabbit",
+    "provider",
+    "llm-gateway",
+    "tool-calling",
+    "function-calling"
+  ],
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "magpie": {
+    "name": "Tabbit（真实工具调用）",
+    "summary": {
+      "en": "Tabbit over its own chat API, with client tools that actually run. Differs from opencode-tabbit-auth: that one declares tool support it does not have and refuses tools; this one carries the tool definitions in the prompt, parses the model's <invoke> blocks back into finish_reason tool_calls, and resumes the same turn once the caller returns a result.",
+      "zh": "把 Tabbit 接进 magpie，并让客户端工具真的能跑。与 opencode-tabbit-auth 的差异：后者声明了工具支持却没有实现、带 tools 的请求直接失效；本插件把工具定义以 XML 写进提示词，模型输出的 <invoke> 块被解析成 finish_reason tool_calls，工具结果回填后同一轮继续生成。"
+    },
+    "icon": "https://web.tabbit.com/favicon.ico",
+    "maxConcurrency": 1
+  },
+  "homepage": "https://github.com/cv-superding/magpie-tabbit2api#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cv-superding/magpie-tabbit2api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cv-superding/magpie-tabbit2api/issues"
+  },
+  "author": "cv-superding"
+}
