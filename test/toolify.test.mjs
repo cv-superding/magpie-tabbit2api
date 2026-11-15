@@ -71,7 +71,7 @@ test("toolPrompt carries the signal and states the once-only rule", () => {
 })
 
 test("toolPrompt is forced when choice is required", () => {
-  assert.match(toolPrompt(TOOLS, "S", { choice: "required" }), /MUST call at least one tool/)
+  assert.match(toolPrompt(TOOLS, "S", { choice: "required" }), /MUST call at least one/)
   assert.match(toolPrompt(TOOLS, "S", { choice: "working_directory" }), /only the tool named "working_directory"/)
 })
 
@@ -97,6 +97,20 @@ test("parseInvokes reads two calls in one reply", () => {
 
 test("parseInvokes returns nothing for a plain answer", () => {
   assert.deepEqual(parseInvokes("Just text, no calls."), [])
+})
+
+test("parseInvokes drops a nameless parameter a model invents", () => {
+  // Seen from a real reply on a tool the caller declared with no parameters:
+  // passed through it becomes {"":"None"}, which a client rejects as an
+  // unknown argument.
+  const calls = parseInvokes(`<invoke name="working_directory"><parameter name="">None</parameter></invoke>`)
+  assert.equal(calls.length, 1)
+  assert.deepEqual(calls[0].arguments, {})
+})
+
+test("parseInvokes reads a call with no parameters at all", () => {
+  const calls = parseInvokes(`<invoke name="working_directory"></invoke>`)
+  assert.deepEqual(calls, [{ name: "working_directory", arguments: {} }])
 })
 
 test("stripTags removes markup and markers from a replayed transcript", () => {

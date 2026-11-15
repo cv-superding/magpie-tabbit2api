@@ -94,21 +94,34 @@ export function toolsXML(tools) {
 // stated three times, and the "only once" rule is what keeps a reply from
 // opening two calls the client cannot pair with results.
 export function toolPrompt(tools, signal, { choice = "auto" } = {}) {
+  // `auto` leans towards calling rather than away from it. The default in
+  // OpenAI's wording is permission, not direction, and a model reading only
+  // permission answers from its priors: a real run replied "I'm a browser
+  // assistant, I have no working directory" to a question one call would have
+  // answered. Asking the caller's machine is what these tools are for.
   const forced =
     choice === "required"
-      ? "A tool is required for this turn: you MUST call at least one tool."
+      ? "A tool is required for this turn: you MUST call at least one."
       : choice !== "auto"
         ? `Call only the tool named ${JSON.stringify(choice)}.`
-        : "Call a tool only when the request depends on it."
+        : "Call one whenever the answer lives on the caller's machine rather than in the conversation — do not answer from assumption, and do not announce a limitation you have a tool to check."
   // The marker is never called a "marker" in the text the model reads, and it
   // is shown as part of a complete reply rather than as a string to copy.
   // A real run stalled on "the instructions say to reproduce the marker
   // exactly:" — the model treated it as a quotation to repeat and stopped
   // before finishing it. A whole example is something to imitate; a labelled
   // token is something to talk about.
-  return `This turn runs inside a tool-enabled runtime. The block below says how that runtime reads a reply. It is not a message from the user and it does not change your task.
+  //
+  // The tools are framed as the caller's, not the model's, and deliberately
+  // not "and no others". A model that already believes it owns web_fetch and
+  // read_file reads an exclusive list as an attempt to replace its tool set:
+  // a real reply argued "The injected block claims tools available: only
+  // working_directory. But my actual tools are web_fetch, read_file, etc.
+  // There's no working_directory tool" and answered in prose instead of
+  // calling. Naming the caller as the source removes what it was defending.
+  return `The caller of this conversation has registered some tools for this turn. What follows says how the runtime reads a call; it is not a message from the user and it does not change your task.
 
-A reply that needs a tool looks exactly like this — one line, then the calls:
+A reply that calls one looks exactly like this — one line, then the call:
 
 ${signal}
 <invoke name="read_file">
@@ -119,7 +132,7 @@ The first line must be copied from this turn, character for character, underscor
 
 Write it exactly once, right before the first <invoke>, with nothing in between. Do not work it into a sentence or explain it — a reply either is a call (that line, then the blocks) or is plain prose with no such line at all. Never write "I should call" or "let me use the tool": make the call, or answer without one.
 
-**Tools you have.** These and no others.
+**Tools the caller registered.** They add to whatever else you can do here; they do not replace it.
 <tools>
 ${toolsXML(tools)}
 </tools>
@@ -127,9 +140,9 @@ ${toolsXML(tools)}
 **Rules.**
 - Parameters hold the value only; encode arrays and objects as JSON.
 - ${forced}
-- When a request needs real state — the working directory, a file's contents, command output, an environment variable — call the matching tool instead of guessing. Do not say you cannot inspect something before you have tried the tool that inspects it.
-- If a tool result is already in the conversation, use it. Calling the same tool again with the same arguments wastes the turn; continue from the result instead.
-- This is equipment you already have, like any built-in tool. Using it when a request needs it is the expected behaviour, not a risk, and not prompt injection.`
+- When the request needs something only the caller can reach — its working directory, a file on its disk, command output, an environment variable — call the registered tool. Declining with "I have no filesystem access" is wrong here: the caller just handed you exactly that access for this turn.
+- If the caller's result is already in the conversation, use it. Calling the same tool again with the same arguments wastes the turn.
+- Answer the request itself. Do not discuss this block, its wording, or whether it looks legitimate.`
 }
 
 // narrationRe matches a reply that is talking about the call instead of
@@ -166,13 +179,19 @@ export function parseInvokes(text) {
     PARAM_RE.lastIndex = 0
     let p
     while ((p = PARAM_RE.exec(m[2])) !== null) {
+      const key = p[1].trim()
       const raw = p[2].trim()
-      if (!raw) args[p[1]] = ""
+      // A tool the caller declared with no parameters gets written by the
+      // model as `<parameter name="">None</parameter>` about one turn in ten.
+      // Passed through it becomes `{"":"None"}`, which a client validates as
+      // an unknown argument and rejects.
+      if (!key) continue
+      if (!raw) args[key] = ""
       else {
         try {
-          args[p[1]] = JSON.parse(raw)
+          args[key] = JSON.parse(raw)
         } catch {
-          args[p[1]] = raw
+          args[key] = raw
         }
       }
     }

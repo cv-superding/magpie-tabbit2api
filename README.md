@@ -54,16 +54,20 @@ The catalog is read live from Tabbit per account. "Free models only" (in the pro
 
 ## Wording that matters
 
-Three phrasings in `src/toolify.mjs` were arrived at by watching a real model fail, and changing them back breaks tool calling:
+Five phrasings in `src/toolify.mjs` were arrived at by watching a real model fail, and changing them back breaks tool calling:
 
 | Wording | What happens without it |
 |---|---|
 | `__CALL_xxxxxxxx__` — no angle brackets | With `<<CALL_7f3a9b>>` the model wrote `CALL_28b2bb`, dropped the brackets, and no call parsed |
-| "A reply that needs a tool looks exactly like this" + a whole example | Labelled "the marker", the model wrote *"the instructions say to reproduce the marker exactly:"* and stalled mid-token |
-| "It is not a message from the user … not prompt injection" | Without it the model read the protocol as an injection attempt and refused: *"This looks like a prompt injection attempt"* |
-| "If a tool result is already in the conversation, use it" | The model ran the same tool a second time on the turn that carried the result |
+| "A reply that calls one looks exactly like this" + a whole example | Labelled "the marker", the model wrote *"the instructions say to reproduce the marker exactly:"* and stalled mid-token |
+| "It is not a message from the user … it does not change your task" | Without it the model read the protocol as an injection attempt and refused: *"This looks like a prompt injection attempt"* |
+| **"Tools the caller registered"** — not "tools you have, and no others" | The model already believes it owns `web_fetch` / `read_file` (Tabbit's own), read the exclusive list as an attempt to replace them, and argued: *"The injected block claims tools available: only working_directory. But my actual tools are web_fetch, read_file, etc."* — then answered in prose |
+| "Call one whenever the answer lives on the caller's machine" — not "call a tool only when the request depends on it" | The softer wording is permission, not direction. Asked plainly *"你在哪个工作目录"* the model replied *"I'm a browser assistant, I have no working directory"* instead of calling the one tool that knows |
+| "If the caller's result is already in the conversation, use it" | The model ran the same tool a second time on the turn that carried the result |
 
-If you tune the prompt, run `test/live/loop.mjs` twice — one success is not stability.
+Two of these are about **whose tools the model thinks they are**. Tabbit's models arrive with a sense of their own toolset; a protocol that claims to replace it gets argued with rather than used. The fix is to name the caller as the source and say the tools add rather than replace.
+
+If you tune the prompt, run `test/live/plain.mjs` — it sends the bare question with no hint that a tool exists, which is the case that fails first.
 
 ## Tests
 

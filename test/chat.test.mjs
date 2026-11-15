@@ -223,7 +223,7 @@ test("tool_choice none leaves the protocol out", async () => {
 test("tool_choice required asks for a call", async () => {
   let sent
   await send({ reply: "hi", body: baseBody({ tool_choice: "required" }), onRun: (b) => (sent = b) })
-  assert.match(sent?.input_payload?.content ?? "", /MUST call at least one tool/)
+  assert.match(sent?.input_payload?.content ?? "", /MUST call at least one/)
 })
 
 test("non-streaming returns a message with tool_calls", async () => {
